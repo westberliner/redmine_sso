@@ -1,0 +1,210 @@
+<?php
+/**
+ * @file
+ * Redmine primary module file.
+ */
+
+define("OAUTHLIB", "PHPoAuthLib");
+
+function redmine_sso_init() {}
+
+ /**
+  * implements hook_menu
+  */
+function redmine_sso_menu() {
+  $items = array();
+
+  $items['admin/config/people/redmine-sso'] = array(
+    'title' => 'Redmine SSO',
+    'description' => 'Manage Redmine SSO settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('redmine_sso_admin_settings'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'includes/redmine_sso.admin.inc',
+  );
+
+  $items['user/redmine-sso-endpoint'] = array(
+    'title' => 'Redmine SSO',
+    'description' => 'Redmine SSO endpoint.',
+    'page callback' => 'redmine_sso_endpoint',
+    'access callback' => TRUE,
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 5,
+    'file' => 'includes/redmine_sso.endpoint.inc',
+  );
+
+  $items['user/%user/redmine-sso/link'] = array(
+    'title' => 'Redmine SSO Link',
+    'description' => 'Redmine SSO link user.',
+    'page callback' => 'redmine_sso_endpoint',
+    'page arguments' => array(1),
+    'access callback' => 'user_edit_access',
+    'access arguments' => array(1),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 5,
+    'file' => 'includes/redmine_sso.endpoint.inc',
+  );
+
+  $items['user/%user/redmine-sso'] = array(
+    'title' => 'Redmine SSO Status',
+    'description' => 'Status of Redmine SSO.',
+    'page callback' => 'redmine_sso_user',
+    'page arguments' => array(1),
+    'access callback' => 'user_edit_access',
+    'access arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 5,
+    'file' => 'includes/redmine_sso.pages.inc',
+  );
+
+  $items['user/%user/redmine-sso/unlink'] = array(
+    'title' => 'Redmine SSO Unlink',
+    'description' => 'Unlink drupal user and redmine account.',
+    'page callback' => 'redmine_sso_unlink',
+    'page arguments' => array(1),
+    'access callback' => 'user_edit_access',
+    'access arguments' => array(1),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 5,
+    'file' => 'includes/redmine_sso.pages.inc',
+  );
+
+  $items['user/%/redmine-sso/logout'] = array(
+    'title' => 'Redmine SSO Logout',
+    'description' => 'Logout drupal user.',
+    'page callback' => 'redmine_sso_logout',
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 5,
+    'file' => 'includes/redmine_sso.pages.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_admin_paths().
+ */
+function redmine_sso_admin_paths() {
+  $paths = array(
+    'user/*/redmine-sso' => TRUE,
+    'user/*/redmine-sso/*' => TRUE,
+    'user/*/redmine-sso/logout' => FALSE
+  );
+  return $paths;
+}
+
+/**
+ * implements hook_libraries_info
+ */
+function redmine_sso_libraries_info() {
+  $libraries = array();
+
+  $libraries[OAUTHLIB] = array(
+    'name' => OAUTHLIB,
+    'path' => 'src',
+    'version' => '1.0',
+    'vendor url' => 'https://github.com/Lusitanian/PHPoAuthLib',
+    'download url' => 'https://github.com/Lusitanian/PHPoAuthLib',
+    'files' => array(
+      'php' => array('OAuth/bootstrap.php'),
+    ),
+  );
+
+  return $libraries;
+}
+
+/**
+ * implements hook_form_alter
+ * adding redmine sso login
+ */
+function redmine_sso_form_alter(&$form, $form_state, $form_id) {
+  $settings = variable_get('redmine_sso_settings', redmine_sso_get_default_settings());
+  $link = l('Redmine SSO', 'user/redmine-sso-endpoint',array('query' => array('redirect' => $_GET['q'])));
+  $blocked_form = t('Login is disabled. Please use !link.', array('!link' => $link));
+  $disabling_forms = array('user_login', 'user_login_block', 'user_pass', 'user_register_form');
+  $disabling_form_fields = array('name', 'pass', 'actions', 'links', 'account');
+
+  // add redmine sso link
+  if('user_login_block' === $form_id && !user_is_logged_in()) {
+    $redmine_sso_endpoint = '<li>' .
+      $link . '</li></ul></div>';
+    $form['links']['#markup'] = str_replace('</ul></div>', $redmine_sso_endpoint, $form['links']['#markup']);
+  }
+
+  // disable login forms
+  if(in_array($form_id, $disabling_forms)) {
+    if($settings['disable_login']) {
+      $form['markup'] = array(
+        '#markup' => $blocked_form,
+        '#weight' => -10
+      );
+      foreach ($disabling_form_fields as $field) {
+        if(!empty($form[$field])) {
+          $form[$field]['#access'] = FALSE;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * implements hook_user_login
+ */
+function redmine_sso_user_login(&$edit, $account) {
+  if ($redmine_sso_session_data = redmine_sso_load_session($account->uid)) {
+    $_SESSION['lusitanian-oauth-token'] = (array)json_decode($redmine_sso_session_data['data']);
+    $_SESSION['lusitanian-oauth-state'] = array();
+
+    $redmine_user = redmine_sso_load_redmine_user();
+
+    if(!redmine_sso_check_redmine_user($redmine_user)) {
+      // drupal message cannot be displayed at the moment
+      //drupal_set_message(t('Your account is blocked by redmine sso. Please contact your admin.'), 'error', FALSE);
+      // workaround is a redirect
+      drupal_goto('user/' . $account->uid . '/redmine-sso/logout');
+    }
+  }
+}
+
+/**
+ * Implements hook_user_delete().
+ */
+function redmine_sso_user_delete($account) {
+  redmine_sso_delete_identity($account->uid);
+  redmine_sso_delete_session($account->uid);
+}
+
+/**
+ * implements hook_menu_local_tasks_alter
+ */
+function redmine_sso_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  if('user' == $root_path) {
+    $settings = variable_get('redmine_sso_settings', redmine_sso_get_default_settings());
+    if($settings['disable_login']) {
+      foreach ($data['tabs'][0]['output'] as $key => $tab) {
+        if('redmine_sso_endpoint' != $tab['#link']['page_callback']) {
+          unset($data['tabs'][0]['output'][$key]);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * implements hook_cron
+ */
+function redmine_sso_cron() {
+  $settings = variable_get('redmine_sso_settings', redmine_sso_get_default_settings());
+  if($settings['daily_checkup']) {
+    if($users = redmine_sso_get_linked_user_sessions(strtotime('-1day'))) {
+      redmine_sso_delete_linked_user_sessions($users);
+    }
+  };
+}
+
+
+/**
+ * load helpers
+ */
+require_once('includes/redmine_sso.helpers.inc');

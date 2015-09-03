@@ -1,0 +1,87 @@
+<?php
+/**
+ * @file
+ * install file for additional schemas for redmine sso
+ */
+/**
+ * Implements hook_schema().
+ */
+function redmine_sso_schema() {
+  $schema = array();
+
+  $schema['redmine_sso_identity'] = array(
+    'description' => 'Holds identities from redmine sso server.',
+    'fields' => array(
+      'id' => array(
+        'description' => 'Unique ID of redmine identity.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'The {users}.uid that owns this redmine_sso identity.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'data' => array(
+        'description' => 'A serialized array containing information from redmine_sso library.',
+        'type' => 'blob',
+        'not null' => TRUE,
+        'size' => 'normal',
+      ),
+    ),
+    'indexes' => array(
+      'uid' => array('uid'),
+    ),
+    'foreign keys' => array(
+      'redmine_sso_identity_user' => array(
+        'table' => 'users',
+        'columns' => array('uid' => 'uid'),
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+
+  $schema['redmine_sso_session'] = array(
+    'description' => 'Holds sessions data from redmine sso.',
+    'fields' => array(
+      'uid' => array(
+        'description' => 'The {users}.uid that owns this redmine sso session data.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'data' => array(
+        'description' => 'A serialized array containing session data from redmine sso.',
+        'type' => 'text',
+        'not null' => TRUE,
+        'size' => 'medium',
+      ),
+      'updated' => array(
+        'description' => 'The Unix timestamp when the session was saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'foreign keys' => array(
+      'redmine_sso_session_user' => array(
+        'table' => 'users',
+        'columns' => array('uid' => 'uid'),
+      ),
+    ),
+    'primary key' => array('uid'),
+  );
+
+  return $schema;
+}
+
+/**
+ * implements hook_uninstall
+ */
+function redmine_sso_uninstall() {
+  variable_del('redmine_sso_settings');
+}
