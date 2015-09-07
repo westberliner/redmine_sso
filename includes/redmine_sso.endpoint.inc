@@ -14,7 +14,7 @@
 function redmine_sso_endpoint($account = NULL) {
   global $base_url, $user;
 
-  $redirect = (!empty($_GET['redirect']))?$_GET['redirect']:'<front>';
+  $redirect = (!empty($_GET['redirect']))?$_GET['redirect']:url('<front>');
 
   // block if user already logged in skip if user want to link his account
   if(user_is_logged_in() && $account === NULL) {

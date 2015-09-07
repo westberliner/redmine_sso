@@ -55,7 +55,7 @@ function redmine_sso_user($account) {
 function redmine_sso_unlink($account) {
   global $user;
 
-  $redirect = (!empty($_GET['redirect']))?$_GET['redirect']:'<front>';
+  $redirect = (!empty($_GET['redirect']))?$_GET['redirect']:url('<front>');
   if($account->uid != $user->uid) {
     drupal_set_message(t('You can only unlink your own account.'), 'status', FALSE);
   }

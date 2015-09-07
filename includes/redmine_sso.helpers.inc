@@ -220,7 +220,6 @@ function redmine_sso_serialize_auth_token($token) {
 
 /**
  * load redmine user from current user
- * work in progress
  */
 function redmine_sso_load_redmine_user() {
   if(!empty($_SESSION['lusitanian-oauth-token'])) {
@@ -234,7 +233,7 @@ function redmine_sso_load_redmine_user() {
     $credentials = new \OAuth\Common\Consumer\Credentials(
       $settings['client_id'],
       $settings['client_secret'],
-      $base_url . '/redmine-sso/endpoint'
+      $base_url . '/redmine-sso-endpoint'
     );
 
     // Service Factory
